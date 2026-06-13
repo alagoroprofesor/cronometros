@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cronómetros por etapas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1014;
+    --panel:#151a21;
+    --panel-2:#1b222b;
+    --rule:#2a323d;
+    --ink:#e9eef4;
+    --muted:#8a97a6;
+    --live:#ffb23f;        /* etapa activa */
+    --live-soft:#5a3f17;
+    --done:#3fb96b;        /* etapa terminada */
+    --danger:#ff5b52;      /* tiempo bajo / agotado */
+    --display:'Space Grotesk',system-ui,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:
+      radial-gradient(1200px 600px at 50% -10%, #19212b 0%, var(--bg) 60%);
+    color:var(--ink);
+    font-family:var(--display);
+    -webkit-font-smoothing:antialiased;
+    padding:24px;
+    min-height:100%;
+  }
+  .wrap{max-width:1040px;margin:0 auto}
+
+  /* ---- cabecera + global ---- */
+  header{display:flex;align-items:baseline;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  h1{font-size:20px;font-weight:700;letter-spacing:.5px;margin:0}
+  h1 .dot{color:var(--live)}
+  .sub{color:var(--muted);font-size:12.5px;letter-spacing:.4px}
+
+  .global{
+    margin:18px 0 26px;
+    background:var(--panel);
+    border:1px solid var(--rule);
+    border-radius:14px;
+    padding:16px 18px;
+  }
+  .global-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+  .global-label{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+  .global-time{font-family:var(--mono);font-size:30px;font-weight:700;letter-spacing:1px}
+  .global-bar{height:8px;border-radius:99px;background:var(--panel-2);margin-top:12px;overflow:hidden}
+  .global-fill{height:100%;width:100%;border-radius:99px;background:linear-gradient(90deg,#3aa3ff,#7c6bff);transition:width .12s linear}
+
+  /* ---- zona central ---- */
+  .stage-area{
+    display:grid;grid-template-columns:300px 1fr;gap:28px;align-items:center;
+  }
+  @media (max-width:760px){.stage-area{grid-template-columns:1fr}}
+
+  /* anillo de la etapa activa */
+  .ring-box{position:relative;width:300px;height:300px;margin:0 auto}
+  .ring-box svg{transform:rotate(-90deg)}
+  .ring-bg{fill:none;stroke:var(--panel-2);stroke-width:14}
+  .ring-fg{fill:none;stroke:var(--live);stroke-width:14;stroke-linecap:round;transition:stroke-dashoffset .12s linear, stroke .2s}
+  .ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .ring-tag{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+  .ring-tag b{color:var(--live)}
+  .ring-time{font-family:var(--mono);font-size:54px;font-weight:700;line-height:1;margin:6px 0 2px}
+  .ring-state{font-size:12px;color:var(--muted);letter-spacing:1px}
+  .ring-box.low .ring-fg{stroke:var(--danger)}
+  .ring-box.low .ring-time{color:var(--danger)}
+  .ring-box.idle .ring-time{color:var(--muted)}
+
+  /* lista de etapas */
+  .stages{display:flex;flex-direction:column;gap:10px}
+  .stage{
+    display:flex;align-items:center;gap:14px;
+    background:var(--panel);border:1px solid var(--rule);border-radius:12px;
+    padding:12px 14px;cursor:pointer;text-align:left;
+    transition:border-color .15s, background .15s, transform .05s;
+    color:inherit;font:inherit;width:100%;
+  }
+  .stage:hover{border-color:#3d4b5a}
+  .stage:active{transform:translateY(1px)}
+  .stage:focus-visible{outline:2px solid var(--live);outline-offset:2px}
+  .stage .num{
+    width:34px;height:34px;flex:0 0 auto;border-radius:9px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-weight:700;background:var(--panel-2);color:var(--muted);
+  }
+  .stage .body{flex:1;min-width:0}
+  .stage .name{font-size:13.5px;font-weight:500}
+  .stage .meta{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .stage .t{font-family:var(--mono);font-size:20px;font-weight:700;letter-spacing:.5px}
+  .stage .prog{height:4px;border-radius:99px;background:var(--panel-2);margin-top:8px;overflow:hidden}
+  .stage .prog i{display:block;height:100%;background:var(--muted);width:0;transition:width .12s linear}
+
+  .stage.active{border-color:var(--live);background:linear-gradient(180deg,var(--panel-2),var(--panel));box-shadow:0 0 0 1px var(--live), 0 0 26px -6px var(--live)}
+  .stage.active .num{background:var(--live);color:#1a1205}
+  .stage.active .t{color:var(--live)}
+  .stage.active .prog i{background:var(--live)}
+  .stage.active .name::after{content:' · ACTIVA';color:var(--live);font-weight:700;letter-spacing:1px;font-size:11px}
+  .stage.active.paused .name::after{content:' · EN PAUSA';color:var(--muted)}
+  .stage.active.low{box-shadow:0 0 0 1px var(--danger), 0 0 26px -6px var(--danger);border-color:var(--danger)}
+  .stage.active.low .num{background:var(--danger);color:#2a0d0b}
+  .stage.active.low .t{color:var(--danger)}
+  .stage.active.low .prog i{background:var(--danger)}
+
+  .stage.done{opacity:.8}
+  .stage.done .num{background:var(--live-soft);color:var(--done)}
+  .stage.done .t{color:var(--done)}
+  .stage.done .prog i{background:var(--done)}
+  .stage.done .name::after{content:' · FIN';color:var(--done);font-weight:700;font-size:11px;letter-spacing:1px}
+
+  /* ---- controles ---- */
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:26px}
+  button.ctl{
+    font:inherit;font-weight:500;font-size:13.5px;letter-spacing:.3px;
+    background:var(--panel-2);color:var(--ink);border:1px solid var(--rule);
+    padding:11px 18px;border-radius:10px;cursor:pointer;transition:.12s;
+  }
+  button.ctl:hover{border-color:#46566a;background:#222b36}
+  button.ctl:focus-visible{outline:2px solid var(--live);outline-offset:2px}
+  button.ctl.primary{background:var(--live);color:#1a1205;border-color:var(--live);font-weight:700}
+  button.ctl.primary:hover{filter:brightness(1.06)}
+  button.ctl.ghost{background:transparent}
+  .file-btn{position:relative;overflow:hidden}
+  .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+  .hint{margin-top:18px;color:var(--muted);font-size:12px;line-height:1.7}
+  .hint kbd{font-family:var(--mono);font-size:11px;background:var(--panel-2);border:1px solid var(--rule);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--ink)}
+  .err{color:var(--danger);font-size:12.5px;margin-top:10px;min-height:1em}
+
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Cronómetros por etapas <span class="dot">●</span></h1>
+      <div class="sub" id="loaded-name">configuración por defecto</div>
+    </div>
+  </header>
+
+  <!-- GLOBAL -->
+  <section class="global">
+    <div class="global-top">
+      <span class="global-label">Tiempo global</span>
+      <span class="global-time" id="g-time">--:--</span>
+    </div>
+    <div class="global-bar"><div class="global-fill" id="g-fill"></div></div>
+  </section>
+
+  <!-- CENTRAL -->
+  <section class="stage-area">
+    <div class="ring-box idle" id="ring-box">
+      <svg viewBox="0 0 300 300" width="300" height="300" aria-hidden="true">
+        <circle class="ring-bg" cx="150" cy="150" r="132"></circle>
+        <circle class="ring-fg" id="ring-fg" cx="150" cy="150" r="132"></circle>
+      </svg>
+      <div class="ring-center">
+        <div class="ring-tag" id="ring-tag">Sin etapa activa</div>
+        <div class="ring-time" id="ring-time">--:--</div>
+        <div class="ring-state" id="ring-state">elige una etapa para empezar</div>
+      </div>
+    </div>
+
+    <div class="stages" id="stages" role="list"></div>
+  </section>
+
+  <!-- CONTROLES -->
+  <div class="controls">
+    <button class="ctl primary" id="btn-toggle">▶ Iniciar</button>
+    <button class="ctl" id="btn-prev">◀ Anterior</button>
+    <button class="ctl" id="btn-next">Siguiente ▶</button>
+    <button class="ctl ghost" id="btn-reset">↺ Reiniciar</button>
+    <label class="ctl ghost file-btn">📂 Cargar XML
+      <input type="file" id="file" accept=".xml,text/xml,application/xml">
+    </label>
+  </div>
+  <div class="err" id="err"></div>
+
+  <div class="hint">
+    Atajos: <kbd>Espacio</kbd> pausar/reanudar · <kbd>←</kbd> / <kbd>→</kbd> anterior/siguiente · <kbd>1</kbd>–<kbd>9</kbd> ir a una etapa · <kbd>R</kbd> reiniciar.<br>
+    Formato XML — <code>unidad</code>: <kbd>s</kbd>/<kbd>m</kbd>/<kbd>h</kbd>. En <code>&lt;parciales&gt;</code>: <code>aviso</code> (segundos para el rojo, def. 5), <code>continuo="1"</code> (salta solo al acabar), <code>ciclico="1"</code> (del último al primero). Cada <code>&lt;parcial&gt;</code> puede llevar su propio <code>aviso</code>.
+  </div>
+</div>
+
+<script>
+const DEFAULT_XML = `<cronometros>
+  <global unidad="m">15</global>
+  <parciales aviso="10" continuo="1" ciclico="0">
+    <parcial id="1" unidad="s">30</parcial>
+    <parcial id="2" unidad="s" aviso="20">90</parcial>
+  </parciales>
+</cronometros>`;
+
+const DEFAULT_AVISO = 5;   // umbral de aviso (s) si no se indica nada
+const RADIUS = 132;
+const CIRC = 2 * Math.PI * RADIUS;
+
+// ---------- estado ----------
+let state = null;     // {global:{total,remaining}, stages:[{id,unit,total,remaining,done}], activeIndex, running}
+let lastTick = null;
+let rafId = null;
+
+// ---------- utilidades ----------
+function toSeconds(value, unit){
+  if (unit === 'm') return value * 60;
+  if (unit === 'h') return value * 3600;
+  return value; // 's' o desconocido
+}
+function fmt(sec){
+  sec = Math.max(0, Math.ceil(sec - 1e-6));
+  const h = Math.floor(sec/3600);
+  const m = Math.floor((sec%3600)/60);
+  const s = sec%60;
+  const pad = n => String(n).padStart(2,'0');
+  return h>0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+function parseConfig(xmlText){
+  const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (doc.querySelector('parsererror')) throw new Error('El XML no es válido (revisa las etiquetas).');
+  const g = doc.querySelector('global');
+  if (!g) throw new Error('Falta el elemento <global>.');
+  const gUnit = (g.getAttribute('unidad') || 's').trim();
+  const gVal = parseFloat((g.textContent || '').trim());
+  if (!isFinite(gVal)) throw new Error('El valor de <global> no es un número.');
+  const globalSec = toSeconds(gVal, gUnit);
+
+  const parcialesEl = doc.querySelector('parciales');
+  const parciales = [...doc.querySelectorAll('parciales > parcial, parcial')];
+  if (parciales.length === 0) throw new Error('No hay ningún <parcial>.');
+
+  // atributos del grupo <parciales>
+  const grpAvisoAttr = parcialesEl && parcialesEl.getAttribute('aviso');
+  const grpAviso = (grpAvisoAttr != null && isFinite(parseFloat(grpAvisoAttr)))
+    ? parseFloat(grpAvisoAttr) : DEFAULT_AVISO;
+  const continuo = parcialesEl ? boolAttr(parcialesEl.getAttribute('continuo')) : false;
+  const ciclico  = parcialesEl ? boolAttr(parcialesEl.getAttribute('ciclico'))  : false;
+
+  const stages = parciales.map((p, i) => {
+    const unit = (p.getAttribute('unidad') || 's').trim();
+    const val = parseFloat((p.textContent || '').trim());
+    if (!isFinite(val)) throw new Error(`El valor del parcial #${i+1} no es un número.`);
+    const avisoAttr = p.getAttribute('aviso');
+    const aviso = (avisoAttr != null && isFinite(parseFloat(avisoAttr)))
+      ? parseFloat(avisoAttr) : grpAviso;
+    return {
+      id: p.getAttribute('id') || String(i+1),
+      unit,
+      total: toSeconds(val, unit),
+      remaining: toSeconds(val, unit),
+      aviso,
+      done: false,
+    };
+  });
+
+  // validación: la suma de parciales no puede superar la global
+  const sum = stages.reduce((a, s) => a + s.total, 0);
+  if (sum > globalSec + 1e-6){
+    throw new Error(`La suma de las parciales (${fmt(sum)}) supera el tiempo global (${fmt(globalSec)}).`);
+  }
+
+  return { global: globalSec, stages, continuo, ciclico };
+}
+
+function boolAttr(v){
+  if (v == null) return false;
+  v = String(v).trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'si' || v === 'sí';
+}
+
+function loadFromConfig(cfg, name){
+  stopLoop();
+  state = {
+    global: { total: cfg.global, remaining: cfg.global },
+    stages: cfg.stages.map(s => ({ ...s })),
+    activeIndex: null,
+    running: false,
+    continuo: cfg.continuo,
+    ciclico: cfg.ciclico,
+  };
+  const flags = [cfg.continuo ? 'continuo' : null, cfg.ciclico ? 'cíclico' : null].filter(Boolean);
+  document.getElementById('loaded-name').textContent =
+    (name ? `archivo: ${name}` : 'configuración por defecto') +
+    (flags.length ? ' · ' + flags.join(' · ') : '');
+  document.getElementById('err').textContent = '';
+  buildStages();
+  render();
+  updateToggleBtn();
+}
+
+// ---------- construcción de la lista ----------
+function buildStages(){
+  const cont = document.getElementById('stages');
+  cont.innerHTML = '';
+  state.stages.forEach((st, i) => {
+    const el = document.createElement('button');
+    el.className = 'stage';
+    el.setAttribute('role','listitem');
+    el.dataset.i = i;
+    el.innerHTML = `
+      <div class="num">${i+1}</div>
+      <div class="body">
+        <div class="name">Etapa ${st.id}</div>
+        <div class="meta">total ${fmt(st.total)} · aviso ${st.aviso}s</div>
+        <div class="prog"><i></i></div>
+      </div>
+      <div class="t">${fmt(st.remaining)}</div>`;
+    el.addEventListener('click', () => activate(i));
+    cont.appendChild(el);
+  });
+}
+
+// ---------- lógica del cronómetro ----------
+function activate(i){
+  if (!state) return;
+  if (state.global.remaining <= 0) return;     // global agotada: no se reactiva nada
+  state.activeIndex = i;
+  if (!state.running){ state.running = true; lastTick = performance.now(); startLoop(); }
+  updateToggleBtn();
+  render();
+}
+
+function toggleRun(){
+  if (!state) return;
+  if (state.activeIndex === null){
+    // sin etapa elegida: empieza por la primera no terminada
+    const idx = state.stages.findIndex(s => !s.done && s.remaining > 0);
+    if (idx === -1) return;
+    activate(idx);
+    return;
+  }
+  state.running = !state.running;
+  if (state.running){ lastTick = performance.now(); startLoop(); }
+  else stopLoop();
+  updateToggleBtn();
+  render();
+}
+
+function go(dir){            // dir = +1 siguiente, -1 anterior
+  if (!state) return;
+  const n = state.stages.length;
+  if (n === 0) return;
+  if (state.activeIndex === null){ activate(dir > 0 ? 0 : n - 1); return; }
+  let j = state.activeIndex + dir;
+  if (j < 0 || j >= n){
+    if (!state.ciclico) return;   // sin ciclico no se da la vuelta
+    j = (j + n) % n;
+  }
+  activate(j);
+}
+function nextStage(){ go(1); }
+function prevStage(){ go(-1); }
+
+// siguiente etapa con tiempo restante (para 'continuo'); respeta 'ciclico'
+function nextWithTime(from){
+  const n = state.stages.length;
+  if (state.ciclico){
+    for (let k = 1; k <= n; k++){
+      const j = (from + k) % n;
+      if (!state.stages[j].done && state.stages[j].remaining > 0) return j;
+    }
+  } else {
+    for (let j = from + 1; j < n; j++){
+      if (!state.stages[j].done && state.stages[j].remaining > 0) return j;
+    }
+  }
+  return -1;
+}
+
+function resetAll(){
+  if (!state) return;
+  stopLoop();
+  state.global.remaining = state.global.total;
+  state.stages.forEach(s => { s.remaining = s.total; s.done = false; });
+  state.activeIndex = null;
+  state.running = false;
+  updateToggleBtn();
+  render();
+}
+
+function startLoop(){ if (!rafId){ lastTick = performance.now(); rafId = requestAnimationFrame(tick); } }
+function stopLoop(){ if (rafId){ cancelAnimationFrame(rafId); rafId = null; } }
+
+function tick(now){
+  const dt = (now - lastTick) / 1000;
+  lastTick = now;
+
+  if (state.running && state.activeIndex !== null){
+    const st = state.stages[state.activeIndex];
+
+    // parcial activa
+    if (!st.done && st.remaining > 0){
+      st.remaining -= dt;
+      if (st.remaining <= 0){
+        st.remaining = 0; st.done = true; beep(2);
+        if (state.continuo){
+          const j = nextWithTime(state.activeIndex);
+          if (j !== -1) state.activeIndex = j;   // sigue corriendo en la nueva
+        }
+      }
+    }
+    // global (corre mientras haya etapa activa y esté en marcha)
+    if (state.global.remaining > 0){
+      state.global.remaining -= dt;
+      if (state.global.remaining <= 0){
+        state.global.remaining = 0;
+        beep(3);
+        state.running = false;       // se detiene todo
+        updateToggleBtn();
+      }
+    }
+  }
+
+  render();
+  if (state.running) rafId = requestAnimationFrame(tick);
+  else rafId = null;
+}
+
+// ---------- pintado ----------
+function render(){
+  if (!state) return;
+
+  // global
+  document.getElementById('g-time').textContent = fmt(state.global.remaining);
+  const gpct = state.global.total ? (state.global.remaining / state.global.total) * 100 : 0;
+  const gfill = document.getElementById('g-fill');
+  gfill.style.width = Math.max(0, gpct) + '%';
+  gfill.style.background = state.global.remaining <= 0
+    ? 'var(--danger)'
+    : (gpct < 12 ? 'linear-gradient(90deg,#ff8a3f,#ff5b52)' : 'linear-gradient(90deg,#3aa3ff,#7c6bff)');
+
+  // anillo central
+  const box = document.getElementById('ring-box');
+  const fg = document.getElementById('ring-fg');
+  const tag = document.getElementById('ring-tag');
+  const tEl = document.getElementById('ring-time');
+  const stateEl = document.getElementById('ring-state');
+
+  fg.style.strokeDasharray = CIRC;
+
+  if (state.activeIndex === null){
+    box.classList.add('idle'); box.classList.remove('low');
+    fg.style.strokeDashoffset = CIRC;
+    tag.innerHTML = state.global.remaining <= 0 ? 'Tiempo global agotado' : 'Sin etapa activa';
+    tEl.textContent = state.global.remaining <= 0 ? '00:00' : '--:--';
+    stateEl.textContent = state.global.remaining <= 0 ? 'pulsa Reiniciar' : 'elige una etapa para empezar';
+  } else {
+    box.classList.remove('idle');
+    const st = state.stages[state.activeIndex];
+    const frac = st.total ? st.remaining / st.total : 0;
+    fg.style.strokeDashoffset = CIRC * (1 - Math.max(0, frac));
+    tag.innerHTML = `Etapa <b>${st.id}</b>`;
+    tEl.textContent = fmt(st.remaining);
+    const low = st.remaining > 0 && st.remaining <= st.aviso;
+    box.classList.toggle('low', low && !st.done);
+    if (state.global.remaining <= 0) stateEl.textContent = 'global agotada';
+    else if (st.done) stateEl.textContent = 'etapa terminada';
+    else if (!state.running) stateEl.textContent = 'en pausa';
+    else stateEl.textContent = 'en marcha';
+  }
+
+  // lista de etapas
+  document.querySelectorAll('.stage').forEach(el => {
+    const i = +el.dataset.i;
+    const st = state.stages[i];
+    el.classList.toggle('active', i === state.activeIndex && !st.done);
+    el.classList.toggle('paused', i === state.activeIndex && !state.running && !st.done);
+    el.classList.toggle('done', st.done);
+    el.classList.toggle('low', i === state.activeIndex && !st.done && st.remaining > 0 && st.remaining <= st.aviso);
+    el.querySelector('.t').textContent = fmt(st.remaining);
+    const pct = st.total ? (1 - st.remaining / st.total) * 100 : 0;
+    el.querySelector('.prog i').style.width = Math.min(100, Math.max(0, pct)) + '%';
+  });
+}
+
+function updateToggleBtn(){
+  const b = document.getElementById('btn-toggle');
+  if (!state){ b.textContent = '▶ Iniciar'; return; }
+  if (state.global.remaining <= 0){ b.textContent = '▶ Iniciar'; return; }
+  b.textContent = state.running ? '⏸ Pausar' : (state.activeIndex===null ? '▶ Iniciar' : '▶ Reanudar');
+}
+
+// ---------- aviso sonoro ----------
+let audioCtx = null;
+function beep(times){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    let t = audioCtx.currentTime;
+    for (let i=0;i<times;i++){
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type='sine'; o.frequency.value = 880;
+      o.connect(g); g.connect(audioCtx.destination);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.25, t+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+0.16);
+      o.start(t); o.stop(t+0.18);
+      t += 0.22;
+    }
+  }catch(e){/* silencioso si el navegador lo bloquea */}
+}
+
+// ---------- eventos ----------
+document.getElementById('btn-toggle').addEventListener('click', toggleRun);
+document.getElementById('btn-prev').addEventListener('click', prevStage);
+document.getElementById('btn-next').addEventListener('click', nextStage);
+document.getElementById('btn-reset').addEventListener('click', resetAll);
+
+document.getElementById('file').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try { loadFromConfig(parseConfig(reader.result), f.name); }
+    catch(err){ document.getElementById('err').textContent = '⚠ ' + err.message; }
+  };
+  reader.readAsText(f);
+  e.target.value = '';
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.code === 'Space'){ e.preventDefault(); toggleRun(); }
+  else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'n'){ nextStage(); }
+  else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'p'){ prevStage(); }
+  else if (e.key.toLowerCase() === 'r'){ resetAll(); }
+  else if (/^[1-9]$/.test(e.key)){
+    const i = +e.key - 1;
+    if (state && i < state.stages.length) activate(i);
+  }
+});
+
+// ---------- arranque ----------
+loadFromConfig(parseConfig(DEFAULT_XML), null);
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+<cronometros>
+  <global unidad="m">10</global>
+  <parciales aviso="10" continuo="1" ciclico="1">
+    <parcial id="1" unidad="s">20</parcial>
+    <parcial id="2" unidad="s" aviso="15">45</parcial>
+    <parcial id="3" unidad="s">30</parcial>
+  </parciales>
+</cronometros>

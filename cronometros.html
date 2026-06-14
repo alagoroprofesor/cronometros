@@ -86,6 +86,16 @@
   .stage:hover{border-color:#3d4b5a}
   .stage:active{transform:translateY(1px)}
   .stage:focus-visible{outline:2px solid var(--live);outline-offset:2px}
+  .stage .reset{
+    flex:0 0 auto;width:34px;height:34px;border-radius:9px;
+    border:1px solid var(--rule);background:var(--panel-2);color:var(--muted);
+    font:inherit;font-size:16px;line-height:1;cursor:pointer;transition:.12s;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .stage .reset:hover{color:var(--ink);border-color:#46566a;background:#222b36}
+  .stage .reset:focus-visible{outline:2px solid var(--live);outline-offset:2px}
+  .stage.active .reset{border-color:var(--live);color:var(--live)}
+  .stage.active.low .reset{border-color:var(--danger);color:var(--danger)}
   .stage .num{
     width:34px;height:34px;flex:0 0 auto;border-radius:9px;
     display:flex;align-items:center;justify-content:center;
@@ -186,7 +196,7 @@
 
   <div class="hint">
     Atajos: <kbd>Espacio</kbd> pausar/reanudar · <kbd>←</kbd> / <kbd>→</kbd> anterior/siguiente · <kbd>1</kbd>–<kbd>9</kbd> ir a una etapa · <kbd>R</kbd> reiniciar.<br>
-    Formato XML — <code>unidad</code>: <kbd>s</kbd>/<kbd>m</kbd>/<kbd>h</kbd>. En <code>&lt;parciales&gt;</code>: <code>aviso</code> (segundos para el rojo, def. 5), <code>continuo="1"</code> (salta solo al acabar), <code>ciclico="1"</code> (del último al primero). Cada <code>&lt;parcial&gt;</code> puede llevar su propio <code>aviso</code>.
+    Formato XML — <code>unidad</code>: <kbd>s</kbd>/<kbd>m</kbd>/<kbd>h</kbd>. En <code>&lt;parciales&gt;</code>: <code>aviso</code> (segundos para el rojo, def. 5), <code>continuo="1"</code> (salta solo al acabar), <code>ciclico="1"</code> (del último al primero), <code>parcialrecuperaglobal="1"</code> (el ↺ devuelve tiempo al global). Cada <code>&lt;parcial&gt;</code> puede llevar su propio <code>aviso</code>.
   </div>
 </div>
 
@@ -243,6 +253,7 @@ function parseConfig(xmlText){
     ? parseFloat(grpAvisoAttr) : DEFAULT_AVISO;
   const continuo = parcialesEl ? boolAttr(parcialesEl.getAttribute('continuo')) : false;
   const ciclico  = parcialesEl ? boolAttr(parcialesEl.getAttribute('ciclico'))  : false;
+  const recuperaGlobal = parcialesEl ? boolAttr(parcialesEl.getAttribute('parcialrecuperaglobal')) : false;
 
   const stages = parciales.map((p, i) => {
     const unit = (p.getAttribute('unidad') || 's').trim();
@@ -267,7 +278,7 @@ function parseConfig(xmlText){
     throw new Error(`La suma de las parciales (${fmt(sum)}) supera el tiempo global (${fmt(globalSec)}).`);
   }
 
-  return { global: globalSec, stages, continuo, ciclico };
+  return { global: globalSec, stages, continuo, ciclico, recuperaGlobal };
 }
 
 function boolAttr(v){
@@ -285,8 +296,9 @@ function loadFromConfig(cfg, name){
     running: false,
     continuo: cfg.continuo,
     ciclico: cfg.ciclico,
+    recuperaGlobal: cfg.recuperaGlobal,
   };
-  const flags = [cfg.continuo ? 'continuo' : null, cfg.ciclico ? 'cíclico' : null].filter(Boolean);
+  const flags = [cfg.continuo ? 'continuo' : null, cfg.ciclico ? 'cíclico' : null, cfg.recuperaGlobal ? 'recupera global' : null].filter(Boolean);
   document.getElementById('loaded-name').textContent =
     (name ? `archivo: ${name}` : 'configuración por defecto') +
     (flags.length ? ' · ' + flags.join(' · ') : '');
@@ -301,9 +313,10 @@ function buildStages(){
   const cont = document.getElementById('stages');
   cont.innerHTML = '';
   state.stages.forEach((st, i) => {
-    const el = document.createElement('button');
+    const el = document.createElement('div');
     el.className = 'stage';
-    el.setAttribute('role','listitem');
+    el.setAttribute('role','button');
+    el.tabIndex = 0;
     el.dataset.i = i;
     el.innerHTML = `
       <div class="num">${i+1}</div>
@@ -312,8 +325,13 @@ function buildStages(){
         <div class="meta">total ${fmt(st.total)} · aviso ${st.aviso}s</div>
         <div class="prog"><i></i></div>
       </div>
-      <div class="t">${fmt(st.remaining)}</div>`;
+      <div class="t">${fmt(st.remaining)}</div>
+      <button class="reset" title="Reiniciar esta etapa" aria-label="Reiniciar etapa ${st.id}">↺</button>`;
     el.addEventListener('click', () => activate(i));
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.code === 'Space'){ e.preventDefault(); e.stopPropagation(); activate(i); }
+    });
+    el.querySelector('.reset').addEventListener('click', (e) => { e.stopPropagation(); resetStage(i); });
     cont.appendChild(el);
   });
 }
@@ -383,6 +401,18 @@ function resetAll(){
   state.activeIndex = null;
   state.running = false;
   updateToggleBtn();
+  render();
+}
+
+function resetStage(i){            // reinicia solo esa parcial a su tiempo total
+  if (!state) return;
+  const st = state.stages[i];
+  const recovered = st.total - st.remaining;     // segundos que devuelve la etapa
+  st.remaining = st.total;
+  st.done = false;
+  if (state.recuperaGlobal && recovered > 0){
+    state.global.remaining = Math.min(state.global.total, state.global.remaining + recovered);
+  }
   render();
 }
 
@@ -528,6 +558,7 @@ document.getElementById('file').addEventListener('change', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
+  if (e.target.tagName === 'BUTTON') return;   // que cada botón gestione su propia tecla
   if (e.code === 'Space'){ e.preventDefault(); toggleRun(); }
   else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'n'){ nextStage(); }
   else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'p'){ prevStage(); }

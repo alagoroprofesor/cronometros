@@ -11,6 +11,7 @@ Toda la configuración se carga desde un fichero **XML**. No necesita instalaci�
 - El **cronómetro global** es el tiempo total disponible. Corre en cuenta atrás mientras haya una etapa activa y en marcha.
 - Cada **etapa (parcial)** tiene su propia cuenta atrás. Al entrar en una etapa (pulsando su tarjeta o con el teclado) empieza a descontar.
 - Al **cambiar de etapa**, el tiempo restante de la anterior se conserva: si vuelves a ella, continúa por donde estaba.
+- Cada etapa tiene un **botón de reinicio (↺)** que la devuelve a su tiempo total sin afectar a las demás. Opcionalmente, ese tiempo recuperado puede sumarse también al global (ver `parcialrecuperaglobal`).
 - Cuando una parcial llega a 0 se marca como terminada y suena un aviso; el global sigue contando.
 - Cuando el global llega a 0 se detiene todo.
 
@@ -19,20 +20,21 @@ Toda la configuración se carga desde un fichero **XML**. No necesita instalaci�
 1. Abre `cronometros.html` en cualquier navegador.
 2. Arranca con la configuración por defecto o pulsa **Cargar XML** para usar la tuya.
 3. Pulsa una etapa para activarla, o usa los botones **Anterior / Siguiente**.
+4. Usa el botón **↺** de cada tarjeta para reiniciar esa etapa concreta.
 
 ### Atajos de teclado
 
 - `Espacio` — pausar / reanudar
 - `←` / `→` (o `P` / `N`) — etapa anterior / siguiente
 - `1`–`9` — ir directamente a una etapa
-- `R` — reiniciar
+- `R` — reiniciar todo
 
 ## Formato del XML
 
 ```xml
 <cronometros>
   <global unidad="m">15</global>
-  <parciales aviso="10" continuo="1" ciclico="0">
+  <parciales aviso="10" continuo="1" ciclico="0" parcialrecuperaglobal="0">
     <parcial id="1" unidad="s">30</parcial>
     <parcial id="2" unidad="s" aviso="20">90</parcial>
   </parciales>
@@ -56,6 +58,7 @@ Contenedor de las etapas. Sus atributos fijan el comportamiento por defecto del 
 | `aviso` | número (segundos) | `5` | Umbral en segundos a partir del cual la etapa se muestra en rojo. Se puede sobreescribir en cada `<parcial>`. |
 | `continuo` | `1` / `0` | `0` | Con `1`, al acabar una etapa salta automáticamente a la siguiente que aún tenga tiempo. |
 | `ciclico` | `1` / `0` | `0` | Con `1`, del último parcial se pasa al primero (tanto en el salto automático como en los botones). Con `0` no se da la vuelta. |
+| `parcialrecuperaglobal` | `1` / `0` | `0` | Con `1`, al reiniciar una etapa con el botón ↺, los segundos que recupera esa parcial (`total − restante`) se suman también al cronómetro global, sin superar nunca su total. Con `0` el global no se modifica. |
 
 ### `<parcial>`
 
